@@ -278,11 +278,8 @@
     async function init() {
       await loadAllData();
       
-      // 实时监听数据变化
-      supabase.channel('db-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'teachers' }, () => loadTeachers())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'campuses' }, () => loadCampuses())
-        .subscribe();
+      // 每5秒自动刷新数据
+      setInterval(loadAllData, 5000);
       
       updateStatus('已连接', true);
     }
