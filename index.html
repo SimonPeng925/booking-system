@@ -306,7 +306,7 @@
         const bins = await response.json();
         
         if (bins.length > 0) {
-          const latestBin = bins[0];
+          const latestBin = bins[0].id;
           dataRecordId = latestBin;
           
           const dataResponse = await fetch('https://jsonbin.io/api/v1/b/' + latestBin, {
