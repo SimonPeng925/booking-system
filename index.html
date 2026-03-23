@@ -276,18 +276,21 @@
 
     // ========== 初始化 ==========
     async function init() {
-      await loadAllData();
+      try {
+        await loadAllData();
+        updateStatus('已连接', true);
+      } catch (err) {
+        updateStatus('连接失败: ' + err.message, false);
+      }
       
       // 每5秒自动刷新数据
       setInterval(loadAllData, 5000);
-      
-      updateStatus('已连接', true);
     }
 
     function updateStatus(text, connected) {
       document.getElementById('statusText').textContent = text;
       document.getElementById('loadingSpinner').classList.add('hidden');
-      document.getElementById('connectionStatus').textContent = connected ? '✓ 云端已连接' : '✗ 连接失败';
+      document.getElementById('connectionStatus').textContent = connected ? '✓ 云端已连接' : '✗ ' + text;
       document.getElementById('connectionStatus').className = connected ? 'text-green-600' : 'text-red-600';
     }
 
@@ -297,30 +300,48 @@
     }
 
     async function loadTeachers() {
-      const { data: teachers, error } = await supabase
-        .from('teachers')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (!error && teachers) {
-        data.teachers = teachers;
-        if (currentTab === 'teachers') renderTeachers();
-        if (currentTab === 'booking') renderBookingPage();
-        if (currentTab === 'schedule') renderSchedulePage();
+      try {
+        const { data: teachers, error } = await supabase
+          .from('teachers')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error('加载外教失败:', error);
+          return;
+        }
+        
+        if (teachers) {
+          data.teachers = teachers;
+          if (currentTab === 'teachers') renderTeachers();
+          if (currentTab === 'booking') renderBookingPage();
+          if (currentTab === 'schedule') renderSchedulePage();
+        }
+      } catch (err) {
+        console.error('加载外教出错:', err);
       }
     }
 
     async function loadCampuses() {
-      const { data: campuses, error } = await supabase
-        .from('campuses')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (!error && campuses) {
-        data.campuses = campuses;
-        if (currentTab === 'campuses') renderCampuses();
-        if (currentTab === 'booking') renderBookingPage();
-        if (currentTab === 'schedule') renderSchedulePage();
+      try {
+        const { data: campuses, error } = await supabase
+          .from('campuses')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error('加载校区失败:', error);
+          return;
+        }
+        
+        if (campuses) {
+          data.campuses = campuses;
+          if (currentTab === 'campuses') renderCampuses();
+          if (currentTab === 'booking') renderBookingPage();
+          if (currentTab === 'schedule') renderSchedulePage();
+        }
+      } catch (err) {
+        console.error('加载校区出错:', err);
       }
     }
 
