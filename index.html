@@ -260,8 +260,8 @@
   <script>
     // ========== JSONBin 配置 ==========
     const JSONBIN_API_KEY = '$2a$10$EtZtKlTc3vzlfJJoDL/HGeWl8U4Y3alAFYNvEumuVK/NVEO0BJPqy';
-    const JSONBIN_COLLECTION_ID = '69c0f160b7ec241ddc9402f3';
-    const JSONBIN_BASE_URL = 'https://jsonbin.io/api/v1/collection/' + JSONBIN_COLLECTION_ID;
+    const JSONBIN_BIN_ID = '69c116cbc3097a1dd54f6870';
+    const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/' + JSONBIN_BIN_ID;
 
     // ========== 数据 ==========
     let data = {
@@ -293,9 +293,9 @@
     // ========== 数据加载 ==========
     async function loadAllData() {
       try {
-        const response = await fetch(JSONBIN_BASE_URL + '/b', {
+        const response = await fetch(JSONBIN_URL, {
           headers: {
-            'X-Access-Key': JSONBIN_API_KEY
+            'X-Master-Key': JSONBIN_API_KEY
           }
         });
         
@@ -303,26 +303,13 @@
           throw new Error('获取数据失败');
         }
         
-        const bins = await response.json();
+        const result = await response.json();
+        const serverData = result.record;
         
-        if (bins.length > 0) {
-          const latestBin = bins[0].id;
-          dataRecordId = latestBin;
-          
-          const dataResponse = await fetch('https://jsonbin.io/api/v1/b/' + latestBin, {
-            headers: {
-              'X-Access-Key': JSONBIN_API_KEY
-            }
-          });
-          
-          if (dataResponse.ok) {
-            const serverData = await dataResponse.json();
-            if (serverData.teachers) data.teachers = serverData.teachers;
-            if (serverData.campuses) data.campuses = serverData.campuses;
-          }
-        } else {
-          // 首次使用，创建初始数据
-          await saveAllData();
+        if (serverData) {
+          if (serverData.teachers) data.teachers = serverData.teachers;
+          if (serverData.campuses) data.campuses = serverData.campuses;
+          if (serverData.bookings) data.bookings = serverData.bookings;
         }
         
         // 更新显示
@@ -340,33 +327,14 @@
       try {
         const payload = JSON.stringify(data);
         
-        if (dataRecordId) {
-          // 更新现有记录
-          await fetch('https://jsonbin.io/api/v1/b/' + dataRecordId, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Access-Key': JSONBIN_API_KEY
-            },
-            body: payload
-          });
-        } else {
-          // 创建新记录
-          const response = await fetch('https://jsonbin.io/api/v1/b', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Access-Key': JSONBIN_API_KEY,
-              'X-Collection-Id': JSONBIN_COLLECTION_ID
-            },
-            body: payload
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            dataRecordId = result.metadata.id;
-          }
-        }
+        await fetch(JSONBIN_URL, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': JSONBIN_API_KEY
+          },
+          body: payload
+        });
       } catch (err) {
         console.error('保存数据失败:', err);
       }
