@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>外教口语测试预约系统（云端版）</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Noto Sans SC', sans-serif; }
+    .slot-btn { transition: all 0.2s; }
+    .slot-btn:hover { transform: translateY(-2px); }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .date-group { break-inside: avoid; }
+    .loading { opacity: 0.6; pointer-events: none; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- 顶部导航 -->
+  <header class="bg-indigo-600 text-white shadow-lg">
+    <div class="max-w-6xl mx-auto px-4 py-4">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h1 class="text-2xl font-bold flex items-center gap-2">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          外教口语测试预约系统
+        </h1>
+        <nav class="flex gap-2 flex-wrap">
+          <button onclick="showTab('teachers')" id="tab-teachers" class="px-4 py-2 rounded-lg hover:bg-indigo-500 transition font-medium">外教管理</button>
+          <button onclick="showTab('campuses')" id="tab-campuses" class="px-4 py-2 rounded-lg hover:bg-indigo-500 transition font-medium">校区管理</button>
+          <button onclick="showTab('booking')" id="tab-booking" class="px-4 py-2 rounded-lg hover:bg-indigo-500 transition font-medium">我要预约</button>
+          <button onclick="showTab('schedule')" id="tab-schedule" class="px-4 py-2 rounded-lg hover:bg-indigo-500 transition font-medium">排课查看</button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    
+    <!-- 状态提示 -->
+    <div id="statusBar" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2 text-blue-800">
+          <svg id="loadingSpinner" class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          <span id="statusText">正在连接云端...</span>
+        </div>
+        <span id="connectionStatus" class="text-sm"></span>
+      </div>
+    </div>
+
+    <!-- 外教管理页面 -->
+    <section id="page-teachers" class="fade-in">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800">外教管理</h2>
+        <button onclick="showModal('addTeacher')" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          添加外教
+        </button>
+      </div>
+      <div id="teachersList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </section>
+
+    <!-- 校区管理页面 -->
+    <section id="page-campuses" class="fade-in hidden">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800">校区管理</h2>
+        <button onclick="showModal('addCampus')" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          添加校区
+        </button>
+      </div>
+      <div id="campusesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </section>
+
+    <!-- 预约页面 -->
+    <section id="page-booking" class="fade-in hidden">
+      <div class="text-center mb-8">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">预约外教口语测试</h2>
+        <p class="text-gray-500">选择您的校区和时间段完成预约</p>
+      </div>
+      
+      <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4 text-gray-700">第一步：选择校区</h3>
+        <div id="bookingCampusList" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      </div>
+
+      <div id="teacherSelection" class="hidden">
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h3 class="text-lg font-semibold mb-4 text-gray-700">第二步：选择外教</h3>
+          <div id="bookingTeacherList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+      </div>
+
+      <div id="timeSelection" class="hidden">
+        <div class="bg-white rounded-xl shadow-lg p-6">
+          <h3 class="text-lg font-semibold mb-4 text-gray-700">第三步：选择时间段</h3>
+          <div id="timeSlots" class="space-y-4"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 排课查看页面 -->
+    <section id="page-schedule" class="fade-in hidden">
+      <div class="text-center mb-8">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">排课安排</h2>
+        <p class="text-gray-500">查看各校区预约情况</p>
+      </div>
+
+      <!-- 视图切换 -->
+      <div class="bg-white rounded-xl shadow-lg p-4 mb-6">
+        <div class="flex gap-2">
+          <button onclick="switchScheduleView('campus')" id="view-campus" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium">按校区查看</button>
+          <button onclick="switchScheduleView('all')" id="view-all" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium hover:bg-gray-300">总表查看</button>
+        </div>
+      </div>
+
+      <!-- 按校区查看 -->
+      <div id="scheduleByCampus">
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h3 class="text-lg font-semibold mb-4 text-gray-700">选择校区</h3>
+          <div id="scheduleCampusList" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+        </div>
+        <div id="campusSchedule" class="hidden">
+          <div class="bg-white rounded-xl shadow-lg p-6">
+            <h3 id="campusScheduleTitle" class="text-lg font-semibold mb-4 text-gray-700"></h3>
+            <div id="campusScheduleContent" class="space-y-3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 总表查看 -->
+      <div id="scheduleAll" class="hidden">
+        <div class="bg-white rounded-xl shadow-lg p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-700">全部排课记录</h3>
+            <span id="totalBookings" class="text-sm text-gray-500"></span>
+          </div>
+          <div id="allScheduleContent" class="space-y-3"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 底部 -->
+  <footer class="text-center py-6 text-gray-400 text-sm">
+    外教口语测试预约系统（云端版）| Supabase 实时同步
+  </footer>
+
+  <!-- 预约成功弹窗 -->
+  <div id="successModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4 transform fade-in">
+      <div class="text-center">
+        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <h3 class="text-2xl font-bold text-gray-800 mb-2">预约成功！</h3>
+        <p class="text-gray-500 mb-6">请保存以下预约信息</p>
+        
+        <div id="bookingResult" class="bg-gray-50 rounded-lg p-4 text-left mb-6"></div>
+        
+        <button onclick="closeModal('successModal')" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 w-full">
+          确定
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加外教弹窗 -->
+  <div id="addTeacherModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full mx-4">
+      <h3 class="text-xl font-bold mb-4">添加外教</h3>
+      <form onsubmit="addTeacher(event)">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">外教姓名</label>
+            <input type="text" id="teacherName" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">简介</label>
+            <textarea id="teacherBio" rows="2" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">可用日期（每天一行）</label>
+            <textarea id="teacherDates" rows="3" placeholder="2026-03-23&#10;2026-03-24&#10;2026-03-25" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">开始时间</label>
+            <input type="time" id="teacherStartTime" value="09:00" class="w-full px-4 py-2 border rounded-lg">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">结束时间</label>
+            <input type="time" id="teacherEndTime" value="17:00" class="w-full px-4 py-2 border rounded-lg">
+          </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+          <button type="button" onclick="closeModal('addTeacherModal')" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg">取消</button>
+          <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 添加校区弹窗 -->
+  <div id="addCampusModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+      <h3 class="text-xl font-bold mb-4">添加校区</h3>
+      <form onsubmit="addCampus(event)">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">校区名称</label>
+          <input type="text" id="campusName" required class="w-full px-4 py-2 border rounded-lg">
+        </div>
+        <div class="flex gap-3">
+          <button type="button" onclick="closeModal('addCampusModal')" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg">取消</button>
+          <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 学生预约弹窗 -->
+  <div id="studentBookingModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+      <h3 class="text-xl font-bold mb-4">填写预约信息</h3>
+      <form onsubmit="confirmBooking(event)">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">学生姓名</label>
+            <input type="text" id="studentName" required class="w-full px-4 py-2 border rounded-lg">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">联系方式</label>
+            <input type="text" id="studentContact" required class="w-full px-4 py-2 border rounded-lg">
+          </div>
+        </div>
+        <input type="hidden" id="selectedTeacherId">
+        <input type="hidden" id="selectedSlotIndex">
+        <div class="flex gap-3 mt-6">
+          <button type="button" onclick="closeModal('studentBookingModal')" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg">取消</button>
+          <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg">确认预约</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ========== Supabase 配置 ==========
+    const SUPABASE_URL = 'https://kcldrvkxnqymiohrwlli.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjbHZkcnZrbnF5bWlvaHJ3cmxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyNDMyMDksImV4cCI6MjA4OTgxOTIwOX0.HGJvqOIsqnO25qQnpGRuJI-dR9hA1RfSbmiMfeQpUj0';
+
+    // 创建 Supabase 客户端
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ========== 数据 ==========
+    let data = {
+      teachers: [],
+      campuses: []
+    };
+
+    // ========== 初始化 ==========
+    async function init() {
+      await loadAllData();
+      
+      // 实时监听数据变化
+      supabase.channel('db-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'teachers' }, () => loadTeachers())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'campuses' }, () => loadCampuses())
+        .subscribe();
+      
+      updateStatus('已连接', true);
+    }
+
+    function updateStatus(text, connected) {
+      document.getElementById('statusText').textContent = text;
+      document.getElementById('loadingSpinner').classList.add('hidden');
+      document.getElementById('connectionStatus').textContent = connected ? '✓ 云端已连接' : '✗ 连接失败';
+      document.getElementById('connectionStatus').className = connected ? 'text-green-600' : 'text-red-600';
+    }
+
+    // ========== 数据加载 ==========
+    async function loadAllData() {
+      await Promise.all([loadTeachers(), loadCampuses()]);
+    }
+
+    async function loadTeachers() {
+      const { data: teachers, error } = await supabase
+        .from('teachers')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (!error && teachers) {
+        data.teachers = teachers;
+        if (currentTab === 'teachers') renderTeachers();
+        if (currentTab === 'booking') renderBookingPage();
+        if (currentTab === 'schedule') renderSchedulePage();
+      }
+    }
+
+    async function loadCampuses() {
+      const { data: campuses, error } = await supabase
+        .from('campuses')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (!error && campuses) {
+        data.campuses = campuses;
+        if (currentTab === 'campuses') renderCampuses();
+        if (currentTab === 'booking') renderBookingPage();
+        if (currentTab === 'schedule') renderSchedulePage();
+      }
+    }
+
+    // 生成15分钟时间段
+    function generateTimeSlots(startTime, endTime) {
+      const slots = [];
+      const [startHour, startMin] = startTime.split(':').map(Number);
+      const [endHour, endMin] = endTime.split(':').map(Number);
+      
+      let currentHour = startHour;
+      let currentMin = startMin;
+      
+      while (currentHour < endHour || (currentHour === endHour && currentMin < endMin)) {
+        const start = `${String(currentHour).padStart(2, '0')}:${String(currentMin).padStart(2, '0')}`;
+        let nextHour = currentHour;
+        let nextMin = currentMin + 15;
+        if (nextMin >= 60) { nextMin -= 60; nextHour++; }
+        const end = `${String(nextHour).padStart(2, '0')}:${String(nextMin).padStart(2, '0')}`;
+        
+        if (nextHour > endHour || (nextHour === endHour && nextMin > endMin)) break;
+        
+        slots.push(`${start}-${end}`);
+        currentHour = nextHour;
+        currentMin = nextMin;
+      }
+      return slots;
+    }
+
+    // Tab切换
+    let currentTab = 'teachers';
+    function showTab(tab) {
+      currentTab = tab;
+      ['teachers', 'campuses', 'booking', 'schedule'].forEach(t => {
+        document.getElementById('page-' + t).classList.add('hidden');
+        document.getElementById('tab-' + t).classList.remove('bg-white', 'text-indigo-600');
+      });
+      document.getElementById('page-' + tab).classList.remove('hidden');
+      document.getElementById('tab-' + tab).classList.add('bg-white', 'text-indigo-600');
+      
+      if (tab === 'teachers') renderTeachers();
+      if (tab === 'campuses') renderCampuses();
+      if (tab === 'booking') renderBookingPage();
+      if (tab === 'schedule') renderSchedulePage();
+    }
+
+    // 弹窗控制
+    function showModal(modalId) {
+      document.getElementById(modalId + 'Modal').classList.remove('hidden');
+    }
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.add('hidden');
+    }
+
+    // 按日期分组
+    function groupByDate(slots) {
+      const grouped = {};
+      (slots || []).forEach((slot, index) => {
+        if (!grouped[slot.date]) grouped[slot.date] = [];
+        grouped[slot.date].push({ ...slot, originalIndex: index });
+      });
+      return grouped;
+    }
+
+    // 渲染外教列表
+    function renderTeachers() {
+      const container = document.getElementById('teachersList');
+      if (data.teachers.length === 0) {
+        container.innerHTML = '<div class="col-span-3 text-center py-12 text-gray-400">暂无外教，请添加</div>';
+        return;
+      }
+      
+      container.innerHTML = data.teachers.map(t => {
+        const slots = t.available_slots || [];
+        const bookedCount = slots.filter(s => s.booked).length;
+        const totalCount = slots.length;
+        const groupedSlots = groupByDate(slots);
+        
+        return `
+          <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="flex items-center gap-4 mb-4">
+              <div class="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-xl">
+                ${t.avatar || t.name?.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2) || 'T'}
+              </div>
+              <div>
+                <h3 class="font-semibold text-lg">${t.name}</h3>
+                <p class="text-gray-500 text-sm">${t.bio || ''}</p>
+              </div>
+            </div>
+            <div class="border-t pt-4">
+              <div class="flex justify-between text-sm mb-3">
+                <span class="text-gray-500">已预约/总时段</span>
+                <span class="font-medium">${bookedCount}/${totalCount}</span>
+              </div>
+              <div class="bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto">
+                ${Object.keys(groupedSlots).sort().map(date => `
+                  <div class="mb-3 date-group">
+                    <p class="text-xs text-gray-500 mb-1">${date}：</p>
+                    <div class="flex flex-wrap gap-1">
+                      ${groupedSlots[date].map(s => `
+                        <span class="px-2 py-1 text-xs rounded ${s.booked ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}">
+                          ${s.time}
+                        </span>
+                      `).join('')}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            <button onclick="deleteTeacher('${t.id}')" class="mt-4 w-full text-red-500 text-sm hover:text-red-700">删除外教</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 渲染校区列表
+    function renderCampuses() {
+      const container = document.getElementById('campusesList');
+      if (data.campuses.length === 0) {
+        container.innerHTML = '<div class="col-span-3 text-center py-12 text-gray-400">暂无校区，请添加</div>';
+        return;
+      }
+      
+      container.innerHTML = data.campuses.map(c => `
+        <div class="bg-white rounded-xl shadow-md p-6 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 font-bold">
+              ${c.name?.charAt(0) || '校'}
+            </div>
+            <span class="font-medium">${c.name}</span>
+          </div>
+          <button onclick="deleteCampus('${c.id}')" class="text-red-500 text-sm hover:text-red-700">删除</button>
+        </div>
+      `).join('');
+    }
+
+    // 预约页面
+    let selectedCampusId = null;
+    let selectedTeacherId = null;
+
+    function renderBookingPage() {
+      selectedCampusId = null;
+      selectedTeacherId = null;
+      document.getElementById('teacherSelection').classList.add('hidden');
+      document.getElementById('timeSelection').classList.add('hidden');
+      
+      const campusContainer = document.getElementById('bookingCampusList');
+      if (data.campuses.length === 0) {
+        campusContainer.innerHTML = '<div class="col-span-4 text-center py-8 text-gray-400">暂无可用校区</div>';
+        return;
+      }
+      
+      campusContainer.innerHTML = data.campuses.map(c => `
+        <button onclick="selectCampus('${c.id}')" class="p-4 border-2 rounded-lg text-center hover:border-indigo-500 hover:bg-indigo-50 transition">
+          <div class="font-medium">${c.name}</div>
+        </button>
+      `).join('');
+    }
+
+    function selectCampus(campusId) {
+      selectedCampusId = campusId;
+      document.querySelectorAll('#bookingCampusList button').forEach(btn => {
+        btn.classList.remove('border-indigo-500', 'bg-indigo-50');
+        btn.classList.add('border-gray-200');
+      });
+      event.target.closest('button').classList.remove('border-gray-200');
+      event.target.closest('button').classList.add('border-indigo-500', 'bg-indigo-50');
+      document.getElementById('teacherSelection').classList.remove('hidden');
+      renderBookingTeachers();
+    }
+
+    function renderBookingTeachers() {
+      const container = document.getElementById('bookingTeacherList');
+      container.innerHTML = data.teachers.map(t => {
+        const availableCount = (t.available_slots || []).filter(s => !s.booked).length;
+        return `
+          <button onclick="selectTeacher('${t.id}')" class="p-4 border-2 rounded-lg text-left hover:border-indigo-500 hover:bg-indigo-50 transition">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold">
+                ${t.avatar || t.name?.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2) || 'T'}
+              </div>
+              <div>
+                <div class="font-semibold">${t.name}</div>
+                <div class="text-sm text-gray-500">${t.bio || ''}</div>
+                <div class="text-sm text-green-600 mt-1">可预约时段：${availableCount}</div>
+              </div>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectTeacher(teacherId) {
+      selectedTeacherId = teacherId;
+      document.querySelectorAll('#bookingTeacherList button').forEach(btn => {
+        btn.classList.remove('border-indigo-500', 'bg-indigo-50');
+        btn.classList.add('border-gray-200');
+      });
+      event.target.closest('button').classList.remove('border-gray-200');
+      event.target.closest('button').classList.add('border-indigo-500', 'bg-indigo-50');
+      document.getElementById('timeSelection').classList.remove('hidden');
+      renderTimeSlots(teacherId);
+    }
+
+    function renderTimeSlots(teacherId) {
+      const teacher = data.teachers.find(t => t.id === teacherId);
+      const container = document.getElementById('timeSlots');
+      const groupedSlots = groupByDate(teacher.available_slots || []);
+      
+      container.innerHTML = Object.keys(groupedSlots).sort().map(date => `
+        <div class="mb-4">
+          <h4 class="font-semibold text-gray-700 mb-2">${date}</h4>
+          <div class="grid grid-cols-4 md:grid-cols-6 gap-2">
+            ${groupedSlots[date].map(s => `
+              <button onclick="bookSlot('${teacherId}', ${s.originalIndex})" ${s.booked ? 'disabled' : ''}
+                class="slot-btn p-2 rounded-lg text-center border-2 transition text-sm ${s.booked ? 'border-red-200 bg-red-50 cursor-not-allowed' : 'border-green-200 bg-white hover:border-green-500 hover:shadow-md'}">
+                <div class="font-medium ${s.booked ? 'text-red-400' : 'text-green-600'}">${s.time}</div>
+                <div class="text-xs ${s.booked ? 'text-red-400' : 'text-green-500'}">${s.booked ? '已约满' : '可预约'}</div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function bookSlot(teacherId, slotIndex) {
+      const teacher = data.teachers.find(t => t.id === teacherId);
+      const slot = teacher.available_slots[slotIndex];
+      if (slot.booked) return;
+      
+      document.getElementById('selectedTeacherId').value = teacherId;
+      document.getElementById('selectedSlotIndex').value = slotIndex;
+      showModal('studentBooking');
+    }
+
+    // 预约确认
+    async function confirmBooking(e) {
+      e.preventDefault();
+      
+      const teacherId = document.getElementById('selectedTeacherId').value;
+      const slotIndex = parseInt(document.getElementById('selectedSlotIndex').value);
+      const studentName = document.getElementById('studentName').value;
+      const studentContact = document.getElementById('studentContact').value;
+      
+      // 重新获取最新数据
+      const { data: teacher, error: fetchError } = await supabase
+        .from('teachers')
+        .select('*')
+        .eq('id', teacherId)
+        .single();
+      
+      if (fetchError) {
+        alert('获取数据失败');
+        return;
+      }
+      
+      const slot = teacher.available_slots[slotIndex];
+      if (slot.booked) {
+        alert('该时段已被预约，请选择其他时段');
+        renderTimeSlots(teacherId);
+        return;
+      }
+      
+      const campus = data.campuses.find(c => c.id === selectedCampusId);
+      
+      // 更新时段
+      teacher.available_slots[slotIndex] = {
+        ...slot,
+        booked: true,
+        bookedBy: { studentName, contact: studentContact, campusId: selectedCampusId, campusName: campus?.name, bookTime: new Date().toISOString() }
+      };
+      
+      const { error: updateError } = await supabase
+        .from('teachers')
+        .update({ available_slots: teacher.available_slots })
+        .eq('id', teacherId);
+      
+      if (updateError) {
+        alert('预约失败，请重试');
+        return;
+      }
+      
+      // 添加预约记录
+      await supabase.from('bookings').insert({
+        teacher_id: teacherId,
+        slot_index: slotIndex,
+        campus_id: selectedCampusId,
+        student_name: studentName,
+        contact: studentContact
+      });
+      
+      // 显示成功
+      document.getElementById('bookingResult').innerHTML = `
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between"><span class="text-gray-500">外教：</span><span class="font-medium">${teacher.name}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">日期：</span><span class="font-medium">${slot.date}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">时间：</span><span class="font-medium">${slot.time}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">校区：</span><span class="font-medium">${campus?.name}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">学生：</span><span class="font-medium">${studentName}</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">联系方式：</span><span class="font-medium">${studentContact}</span></div>
+        </div>
+      `;
+      
+      closeModal('studentBookingModal');
+      showModal('success');
+      
+      document.getElementById('studentName').value = '';
+      document.getElementById('studentContact').value = '';
+      
+      // 刷新数据
+      await loadAllData();
+    }
+
+    // 排课查看
+    let currentScheduleView = 'campus';
+
+    function renderSchedulePage() {
+      const campusContainer = document.getElementById('scheduleCampusList');
+      campusContainer.innerHTML = data.campuses.map(c => `
+        <button onclick="viewCampusSchedule('${c.id}')" class="p-3 border-2 rounded-lg text-center hover:border-indigo-500 hover:bg-indigo-50 transition">
+          <div class="font-medium text-sm">${c.name}</div>
+        </button>
+      `).join('');
+      renderAllSchedule();
+    }
+
+    function switchScheduleView(view) {
+      currentScheduleView = view;
+      document.getElementById('view-campus').className = view === 'campus' ? 'px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium' : 'px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium hover:bg-gray-300';
+      document.getElementById('view-all').className = view === 'all' ? 'px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium' : 'px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium hover:bg-gray-300';
+      document.getElementById('scheduleByCampus').classList.toggle('hidden', view !== 'campus');
+      document.getElementById('scheduleAll').classList.toggle('hidden', view !== 'all');
+    }
+
+    function viewCampusSchedule(campusId) {
+      const campus = data.campuses.find(c => c.id === campusId);
+      
+      document.querySelectorAll('#scheduleCampusList button').forEach(btn => {
+        btn.classList.remove('border-indigo-500', 'bg-indigo-50');
+        btn.classList.add('border-gray-200');
+      });
+      event.target.closest('button').classList.remove('border-gray-200');
+      event.target.closest('button').classList.add('border-indigo-500', 'bg-indigo-50');
+      
+      document.getElementById('campusSchedule').classList.remove('hidden');
+      document.getElementById('campusScheduleTitle').textContent = `${campus?.name} - 预约记录`;
+      
+      const bookings = [];
+      data.teachers.forEach(t => {
+        (t.available_slots || []).forEach((s, idx) => {
+          if (s.booked && s.bookedBy?.campusId === campusId) {
+            bookings.push({ teacher: t, slot: s });
+          }
+        });
+      });
+      
+      const grouped = {};
+      bookings.forEach(b => {
+        if (!grouped[b.slot.date]) grouped[b.slot.date] = [];
+        grouped[b.slot.date].push(b);
+      });
+      
+      const content = document.getElementById('campusScheduleContent');
+      if (bookings.length === 0) {
+        content.innerHTML = '<div class="text-center py-8 text-gray-400">暂无预约记录</div>';
+      } else {
+        content.innerHTML = Object.keys(grouped).sort().map(date => `
+          <div class="border rounded-lg overflow-hidden">
+            <div class="bg-gray-100 px-4 py-2 font-medium">${date}</div>
+            <div class="divide-y">
+              ${grouped[date].map(b => `
+                <div class="p-4 flex justify-between items-center">
+                  <div>
+                    <div class="font-medium">${b.teacher.name}</div>
+                    <div class="text-sm text-gray-500">${b.slot.time}</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="font-medium">${b.slot.bookedBy.studentName}</div>
+                    <div class="text-sm text-gray-500">${b.slot.bookedBy.contact}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    function renderAllSchedule() {
+      const bookings = [];
+      data.teachers.forEach(t => {
+        (t.available_slots || []).forEach(s => {
+          if (s.booked && s.bookedBy) {
+            bookings.push({ teacher: t, slot: s });
+          }
+        });
+      });
+      
+      const grouped = {};
+      bookings.forEach(b => {
+        if (!grouped[b.slot.date]) grouped[b.slot.date] = [];
+        grouped[b.slot.date].push(b);
+      });
+      
+      document.getElementById('totalBookings').textContent = `共 ${bookings.length} 条预约记录`;
+      
+      const content = document.getElementById('allScheduleContent');
+      if (bookings.length === 0) {
+        content.innerHTML = '<div class="text-center py-8 text-gray-400">暂无预约记录</div>';
+      } else {
+        content.innerHTML = Object.keys(grouped).sort().map(date => `
+          <div class="border rounded-lg overflow-hidden">
+            <div class="bg-indigo-100 px-4 py-2 font-medium text-indigo-800">${date}</div>
+            <div class="divide-y">
+              ${grouped[date].map(b => `
+                <div class="p-4 flex justify-between items-center flex-wrap gap-2">
+                  <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm">
+                      ${b.teacher.avatar || b.teacher.name?.charAt(0)}
+                    </div>
+                    <div>
+                      <div class="font-medium">${b.teacher.name}</div>
+                      <div class="text-sm text-gray-500">${b.slot.time}</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-4">
+                    <div class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">${b.slot.bookedBy.campusName}</div>
+                    <div class="text-right">
+                      <div class="font-medium">${b.slot.bookedBy.studentName}</div>
+                      <div class="text-sm text-gray-500">${b.slot.bookedBy.contact}</div>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // 添加外教
+    async function addTeacher(e) {
+      e.preventDefault();
+      
+      const name = document.getElementById('teacherName').value;
+      const bio = document.getElementById('teacherBio').value;
+      const datesText = document.getElementById('teacherDates').value.trim();
+      const startTime = document.getElementById('teacherStartTime').value;
+      const endTime = document.getElementById('teacherEndTime').value;
+      
+      const dates = datesText ? datesText.split('\n').map(d => d.trim()).filter(d => d) : [];
+      const times = generateTimeSlots(startTime, endTime);
+      
+      const available_slots = [];
+      dates.forEach(date => {
+        times.forEach(time => {
+          available_slots.push({ date, time, booked: false, bookedBy: null });
+        });
+      });
+      
+      await supabase.from('teachers').insert({
+        name,
+        bio,
+        avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+        available_slots
+      });
+      
+      closeModal('addTeacherModal');
+      document.getElementById('teacherName').value = '';
+      document.getElementById('teacherBio').value = '';
+      document.getElementById('teacherDates').value = '';
+      
+      await loadTeachers();
+    }
+
+    // 添加校区
+    async function addCampus(e) {
+      e.preventDefault();
+      const name = document.getElementById('campusName').value;
+      await supabase.from('campuses').insert({ name });
+      closeModal('addCampusModal');
+      document.getElementById('campusName').value = '';
+      await loadCampuses();
+    }
+
+    // 删除
+    async function deleteTeacher(id) {
+      if (confirm('确定删除该外教吗？')) {
+        await supabase.from('teachers').delete().eq('id', id);
+        await loadTeachers();
+      }
+    }
+
+    async function deleteCampus(id) {
+      if (confirm('确定删除该校区吗？')) {
+        await supabase.from('campuses').delete().eq('id', id);
+        await loadCampuses();
+      }
+    }
+
+    // 启动
+    init();
+  </script>
+</body>
+</html>
